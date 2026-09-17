@@ -1,6 +1,6 @@
-import { requireUser, readJson } from './_auth'
+import { requireUser, readJson } from './_auth.js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getServiceSupabase, getWimpyPayHeaders } from './_supabase'
+import { getServiceSupabase, getWimpyPayHeaders } from './_supabase.js'
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed' })
@@ -20,16 +20,16 @@ export default async function handler(request: VercelRequest, response: VercelRe
     supabase.from('wc_payouts').select('id').eq('creator_id', creator.id).in('status', ['pending', 'processing']).limit(1),
   ])
   if (activePayouts?.length) return response.status(409).json({ error: 'A payout is already in progress. Wait for it to finish before requesting another.' })
-  const totalTips = (tips ?? []).reduce((sum, item) => sum + item.amount_kobo, 0)
-  const totalSubscriptions = (subscriptionCharges ?? []).reduce((sum, item) => sum + item.amount_kobo, 0)
-  const totalPaidOut = (paidPayouts ?? []).reduce((sum, item) => sum + item.amount_kobo, 0)
+  const totalTips = (tips ?? []).reduce((sum: number, item: { amount_kobo: number }) => sum + item.amount_kobo, 0)
+  const totalSubscriptions = (subscriptionCharges ?? []).reduce((sum: number, item: { amount_kobo: number }) => sum + item.amount_kobo, 0)
+  const totalPaidOut = (paidPayouts ?? []).reduce((sum: number, item: { amount_kobo: number }) => sum + item.amount_kobo, 0)
   const availableBalance = totalTips + totalSubscriptions - totalPaidOut
   if (amount > availableBalance) return response.status(400).json({ error: `Your available balance is ₦${Math.max(availableBalance, 0) / 100}. Request a smaller amount.` })
   const idempotencyKey = crypto.randomUUID()
   const { data: payout, error } = await supabase.from('wc_payouts').insert({ creator_id: creator.id, amount_kobo: amount, status: 'pending', idempotency_key: idempotencyKey }).select().single()
   if (error) { if (error.code === '23505') return response.status(409).json({ error: 'A payout is already in progress. Wait for it to finish before requesting another.' }); return response.status(500).json({ error: 'Could not create payout request.' }) }
   const upstreamResponse = await fetch(`${process.env.WIMPYPAY_INTERNAL_URL}/internal/payout`, { method: 'POST', headers: { ...getWimpyPayHeaders(), 'idempotency-key': idempotencyKey }, body: JSON.stringify({ creatorUserId: auth.user?.id, amount, idempotencyKey }) })
-  const result = await upstreamResponse.json().catch(() => ({}))
+  const result: any = await upstreamResponse.json().catch(() => ({}))
   if (!upstreamResponse.ok) { await supabase.from('wc_payouts').update({ status: 'failed', processed_at: new Date().toISOString() }).eq('id', payout.id); return response.status(upstreamResponse.status).json({ error: result.error ?? 'WimpyPay could not start this payout.' }) }
   const transferCode = result.transfer_code ?? result.transferCode
   await supabase.from('wc_payouts').update({ paystack_transfer_code: transferCode, wimpypay_reference: result.reference ?? result.transaction_reference ?? result.transactionReference, status: result.status ?? 'processing' }).eq('id', payout.id)

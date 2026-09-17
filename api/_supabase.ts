@@ -2,15 +2,15 @@ import { createClient } from '@supabase/supabase-js'
 
 let serviceClient: ReturnType<typeof createClient> | undefined
 
-export function getServiceSupabase() {
+export function getServiceSupabase(): any {
   if (!serviceClient) {
-    serviceClient = createClient(process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? '', process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', { auth: { autoRefreshToken: false, persistSession: false } })
+    serviceClient = createClient(process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '', process.env.SUPABASE_SERVICE_ROLE_KEY ?? '', { auth: { autoRefreshToken: false, persistSession: false } })
   }
   return serviceClient
 }
 
 export function getWimpyPayHeaders() {
-  return { 'content-type': 'application/json', authorization: `Bearer ${process.env.WIMPYPAY_SHARED_SECRET ?? ''}` }
+  return { 'content-type': 'application/json', authorization: `Bearer ${process.env.WIMPYPAY_SHARED_SECRET ?? process.env.WIMPYPAY_INTERNAL_API_KEY ?? ''}` }
 }
 
 export async function recordPaymentReconciliation(input: { userId: string; amountKobo: number; reason: string; reference?: string }) {

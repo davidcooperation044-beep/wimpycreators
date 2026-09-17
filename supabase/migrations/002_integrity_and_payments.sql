@@ -16,6 +16,8 @@ alter table public.wc_payouts add column if not exists wimpypay_reference text;
 alter table public.wc_subscription_charges add column if not exists idempotency_key uuid;
 alter table public.wc_subscription_charges add column if not exists wimpypay_reference text;
 alter table public.wc_subscriptions add column if not exists renewal_attempts integer not null default 0;
+alter table public.wc_membership_tiers add column if not exists is_active boolean not null default true;
+alter table public.wc_tips add column if not exists sender_id uuid references auth.users(id);
 
 create unique index if not exists wc_tips_idempotency_key_unique on public.wc_tips (idempotency_key) where idempotency_key is not null;
 create unique index if not exists wc_subscriptions_idempotency_key_unique on public.wc_subscriptions (idempotency_key) where idempotency_key is not null;

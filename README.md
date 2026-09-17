@@ -10,7 +10,11 @@ WimpyCreators is the creator discovery and monetization frontend for the Wimpy C
 4. Create a public Supabase Storage bucket named `creator-assets` with upload policies appropriate for authenticated users.
 5. Run `npm install` and `npm run dev`.
 
-Never prefix server-only variables with `VITE_`. The browser only receives `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+The Vite development server mounts the same `/api` handlers locally, so tip and wallet-funding requests do not 404 during development. Production deployments use the native Vercel function routes.
+
+Client-safe variables are `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_PAYSTACK_PUBLIC_KEY`. Never prefix server-only variables with `VITE_`; service-role and WimpyPay credentials must remain available only to `/api` and Supabase Edge Functions.
+
+Wallet funding uses `/api/fund-wallet/initiate` and `/api/fund-wallet/verify`. WimpyPay must expose `POST /internal/wallet-funding/initiate` returning `{ reference }`, and `POST /internal/wallet-funding/verify` returning `{ status: 'confirmed'|'failed', balance? }`. WimpyPay owns Paystack initialization, verification, wallet crediting, and idempotency; WimpyCreators never sends a Paystack secret key.
 
 ## Integration boundaries
 

@@ -1,6 +1,6 @@
-import { requireUser, readJson } from './_auth'
+import { requireUser, readJson } from './_auth.js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getServiceSupabase, getWimpyPayHeaders } from './_supabase'
+import { getServiceSupabase, getWimpyPayHeaders } from './_supabase.js'
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed' })
@@ -12,7 +12,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
   const accountName = typeof body?.accountName === 'string' ? body.accountName : ''
   if (!bankCode || !/^\d{10}$/.test(accountNumber) || !accountName) return response.status(400).json({ error: 'Enter valid bank details.' })
   const upstreamResponse = await fetch(`${process.env.WIMPYPAY_INTERNAL_URL}/internal/payout-recipients`, { method: 'POST', headers: getWimpyPayHeaders(), body: JSON.stringify({ creatorUserId: auth.user?.id, bankCode, accountNumber, accountName }) })
-  const result = await upstreamResponse.json().catch(() => ({}))
+  const result: any = await upstreamResponse.json().catch(() => ({}))
   if (!upstreamResponse.ok) return response.status(upstreamResponse.status).json({ error: result.error ?? 'Paystack could not validate these bank details.' })
   const recipientCode = result.recipient_code ?? result.recipientCode
   if (!recipientCode) return response.status(502).json({ error: 'WimpyPay returned no recipient code.' })

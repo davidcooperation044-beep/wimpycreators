@@ -35,6 +35,9 @@ create table if not exists public.wc_subscription_charges (
   creator_id uuid not null references public.wc_creators(id) on delete cascade, amount_kobo integer not null, charged_at timestamptz default now()
 );
 
+alter table public.wc_membership_tiers add column if not exists is_active boolean not null default true;
+alter table public.wc_tips add column if not exists sender_id uuid references auth.users(id);
+
 alter table public.wc_creators enable row level security;
 alter table public.wc_membership_tiers enable row level security;
 alter table public.wc_subscriptions enable row level security;

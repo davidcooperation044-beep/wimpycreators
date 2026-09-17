@@ -50,6 +50,12 @@ const formatMoney = (kobo: number) =>
 const formatFollowers = (count: number) =>
   count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count);
 
+declare global {
+  interface Window {
+    PaystackPop?: { setup: (options: { key: string; email: string; amount: number; ref: string; onClose: () => void; callback: (response: { reference: string }) => void }) => { openIframe: () => void } };
+  }
+}
+
 function App() {
   const supabase = getSupabaseClient();
   const [user, setUser] = useState<User | null>(null);
@@ -383,6 +389,7 @@ function App() {
       {tip && (
         <TipModal
           creator={tip}
+          user={user}
           sent={tipSent}
           error={tipError}
           onClose={() => setTip(null)}
@@ -754,6 +761,7 @@ function Empty({ title, text: description }: { title: string; text: string }) {
 
 function TipModal({
   creator,
+  user,
   sent,
   error,
   onClose,
@@ -761,6 +769,7 @@ function TipModal({
   onSent,
 }: {
   creator: Creator;
+  user: User | null;
   sent: boolean;
   error: string;
   onClose: () => void;
@@ -770,6 +779,7 @@ function TipModal({
   const supabase = getSupabaseClient();
   const [amount, setAmount] = useState(2500);
   const [message, setMessage] = useState("");
+  const [funding, setFunding] = useState(false);
   const submit = async () => {
     const session = await supabase?.auth.getSession();
     const response = await fetch("/api/tip", {
@@ -785,6 +795,7 @@ function TipModal({
     else onSent();
   };
   return (
+    <>
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div
         className="modal tip-modal"
@@ -851,11 +862,7 @@ function TipModal({
             {error && (
               <p className="inline-error">
                 {error}{" "}
-                <button
-                  onClick={() =>
-                    open("https://pay.wimpy-corp.com.ng", "_blank")
-                  }
-                >
+                <button onClick={() => setFunding(true)}>
                   Fund wallet
                 </button>
               </p>
@@ -868,7 +875,47 @@ function TipModal({
         )}
       </div>
     </div>
+    {funding && user && <FundWalletModal user={user} onClose={() => setFunding(false)} onFunded={async () => { setFunding(false); await submit() }} />}
+    </>
   );
+}
+
+function FundWalletModal({ user, onClose, onFunded }: { user: User; onClose: () => void; onFunded: () => Promise<void> | void }) {
+  const supabase = getSupabaseClient();
+  const [amount, setAmount] = useState(10000);
+  const [customAmount, setCustomAmount] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const amountKobo = customAmount ? Number(customAmount.replace(/\D/g, "")) * 100 : amount * 100;
+  const loadPaystack = () => new Promise<void>((resolve, reject) => {
+    if (window.PaystackPop) return resolve();
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://js.paystack.co/v1/inline.js"]');
+    if (existing) { existing.addEventListener("load", () => resolve()); existing.addEventListener("error", () => reject(new Error("Could not load secure payment checkout."))); return; }
+    const script = document.createElement("script"); script.src = "https://js.paystack.co/v1/inline.js"; script.onload = () => resolve(); script.onerror = () => reject(new Error("Could not load secure payment checkout.")); document.head.appendChild(script);
+  });
+  const startFunding = async () => {
+    setError("");
+    if (!Number.isInteger(amountKobo) || amountKobo < 10000) { setError("Enter at least ₦100."); return; }
+    setLoading(true);
+    try {
+      const session = await supabase?.auth.getSession();
+      const initiate = await fetch("/api/fund-wallet/initiate", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session?.data.session?.access_token ?? ""}` }, body: JSON.stringify({ amount: amountKobo }) });
+      const initiated = await initiate.json().catch(() => ({}));
+      if (!initiate.ok) throw new Error(initiated.error ?? "Could not start wallet funding.");
+      await loadPaystack();
+      const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+      if (!publicKey || !window.PaystackPop) throw new Error("Wallet funding is not configured yet.");
+      window.PaystackPop.setup({ key: publicKey, email: user.email ?? "", amount: amountKobo, ref: initiated.funding.reference, onClose: () => setLoading(false), callback: async ({ reference }) => {
+        const sessionAfterPayment = await supabase?.auth.getSession();
+        const verified = await fetch("/api/fund-wallet/verify", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${sessionAfterPayment?.data.session?.access_token ?? ""}` }, body: JSON.stringify({ reference }) });
+        const result = await verified.json().catch(() => ({}));
+        if (!verified.ok || result.status !== "confirmed") { setError(result.error ?? "Wallet funding could not be confirmed."); setLoading(false); return; }
+        setConfirmed(true); setLoading(false); await onFunded();
+      }}).openIframe();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not start wallet funding."); setLoading(false); }
+  };
+  return <div className="modal-backdrop" onMouseDown={onClose}><div className="modal tip-modal" onMouseDown={(event) => event.stopPropagation()}>{confirmed ? <div className="success-state"><span className="success-star">✦</span><p className="eyebrow">WALLET FUNDED</p><h2>Your wallet is<br /><em>ready to go.</em></h2><p>Your payment was verified by WimpyPay. Retrying your action now.</p></div> : <><button className="close-button" onClick={onClose} aria-label="Close wallet funding">×</button><p className="eyebrow">WIMPYPAY WALLET</p><h2>Add a little<br /><em>room to your wallet.</em></h2><div className="amount-options">{[2000, 5000, 10000, 20000].map((value) => <button className={!customAmount && amount === value ? "active" : ""} key={value} onClick={() => { setAmount(value); setCustomAmount("") }}>₦{value.toLocaleString()}</button>)}<label>₦ <input value={customAmount} placeholder="Custom amount" inputMode="numeric" onChange={(event) => setCustomAmount(event.target.value.replace(/\D/g, ""))} /></label></div>{error && <p className="inline-error">{error}</p>}<button className="primary-button" disabled={loading} onClick={startFunding}>{loading ? "Opening secure checkout..." : "Fund wallet securely"} <span>→</span></button><p className="secure-note">Secure checkout handled by WimpyPay and Paystack</p></>}</div></div>;
 }
 
 function Onboarding({ user, onClose }: { user: User; onClose: () => void }) {
@@ -1083,6 +1130,8 @@ function CreatorPage({
   const [tiers, setTiers] = useState<any[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [message, setMessage] = useState("");
+  const [funding, setFunding] = useState(false);
+  const [pendingTierId, setPendingTierId] = useState<string | null>(null);
   useEffect(() => {
     if (!supabase || !creator) return;
     Promise.all([
@@ -1120,13 +1169,11 @@ function CreatorPage({
       body: JSON.stringify({ tierId }),
     });
     const result = await response.json().catch(() => ({}));
-    setMessage(
-      response.ok
-        ? "Membership activated."
-        : (result.error ?? "Could not subscribe."),
-    );
+    if (response.ok) setMessage("Membership activated.");
+    else { setMessage(result.error ?? "Could not subscribe."); setPendingTierId(tierId); setFunding(true); }
   };
   return (
+    <>
     <PageFrame onBack={onBack}>
       <div className="profile-hero">
         <img src={creator.cover} alt="" />
@@ -1193,6 +1240,8 @@ function CreatorPage({
         />
       )}
     </PageFrame>
+    {funding && user && <FundWalletModal user={user} onClose={() => { setFunding(false); setPendingTierId(null) }} onFunded={async () => { const retryTierId = pendingTierId; setFunding(false); setPendingTierId(null); if (retryTierId) await subscribe(retryTierId) }} />}
+    </>
   );
 }
 function PageFrame({

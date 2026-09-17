@@ -1,6 +1,6 @@
-import { requireUser } from './_auth'
+import { requireUser } from './_auth.js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getServiceSupabase, getWimpyPayHeaders } from './_supabase'
+import { getServiceSupabase, getWimpyPayHeaders } from './_supabase.js'
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   if (request.method !== 'GET') return response.status(405).json({ error: 'Method not allowed' })
@@ -14,7 +14,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
   if (payout.paystack_transfer_code) {
     const upstreamResponse = await fetch(`${process.env.WIMPYPAY_INTERNAL_URL}/internal/payout/${payout.paystack_transfer_code}`, { headers: getWimpyPayHeaders() })
     if (upstreamResponse.ok) {
-      const result = await upstreamResponse.json()
+      const result: any = await upstreamResponse.json()
       const status = result.status ?? payout.status
       if (status !== payout.status) await supabase.from('wc_payouts').update({ status, processed_at: ['paid', 'failed'].includes(status) ? new Date().toISOString() : null }).eq('id', payout.id)
       return response.status(200).json({ ...payout, status })

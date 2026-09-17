@@ -1,6 +1,6 @@
-import { requireUser, readJson } from './_auth'
+import { requireUser, readJson } from './_auth.js'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getServiceSupabase, getWimpyPayHeaders, recordPaymentReconciliation } from './_supabase'
+import { getServiceSupabase, getWimpyPayHeaders, recordPaymentReconciliation } from './_supabase.js'
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
   if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed' })
@@ -16,7 +16,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
   const renewsAt = new Date(); renewsAt.setMonth(renewsAt.getMonth() + 1)
   const idempotencyKey = crypto.randomUUID()
   const upstreamResponse = await fetch(`${process.env.WIMPYPAY_INTERNAL_URL}/internal/charge-wallet`, { method: 'POST', headers: { ...getWimpyPayHeaders(), 'idempotency-key': idempotencyKey }, body: JSON.stringify({ userId: auth.user?.id, amount: tier.price_kobo, sourceProduct: 'wimpycreators', reason: `Membership tier ${tier.id}`, idempotencyKey }) })
-  const result = await upstreamResponse.json().catch(() => ({}))
+  const result: any = await upstreamResponse.json().catch(() => ({}))
   if (!upstreamResponse.ok) return response.status(upstreamResponse.status === 402 ? 402 : 502).json({ error: result.error ?? 'Wallet charge failed. Fund your WimpyPay wallet and try again.' })
   const reference = result.reference ?? result.transaction_reference ?? result.transactionReference
   const { data: subscription, error } = await supabase.from('wc_subscriptions').insert({ subscriber_id: auth.user?.id, creator_id: tier.creator_id, tier_id: tier.id, status: 'active', renews_at: renewsAt.toISOString(), idempotency_key: idempotencyKey, wimpypay_reference: reference }).select().single()

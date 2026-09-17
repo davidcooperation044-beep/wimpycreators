@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getServiceSupabase } from './_supabase'
+import { getServiceSupabase } from './_supabase.js'
 
 export async function requireUser(request: VercelRequest, response: VercelResponse) {
   const header = request.headers.authorization
