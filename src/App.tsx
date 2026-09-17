@@ -777,10 +777,18 @@ function TipModal({
   onSent: () => void;
 }) {
   const supabase = getSupabaseClient();
-  const [amount, setAmount] = useState(2500);
+  const [amount, setAmount] = useState(250000);
+  const [customAmount, setCustomAmount] = useState("");
   const [message, setMessage] = useState("");
   const [funding, setFunding] = useState(false);
+  const [localError, setLocalError] = useState("");
   const submit = async () => {
+    const amountKobo = customAmount ? Number(customAmount) * 100 : amount;
+    if (!Number.isInteger(amountKobo) || amountKobo < 100) {
+      setLocalError("Enter a valid tip amount.");
+      return;
+    }
+    setLocalError("");
     const session = await supabase?.auth.getSession();
     const response = await fetch("/api/tip", {
       method: "POST",
@@ -788,7 +796,7 @@ function TipModal({
         "content-type": "application/json",
         authorization: `Bearer ${session?.data.session?.access_token ?? ""}`,
       },
-      body: JSON.stringify({ creatorId: creator.id, amount, message }),
+      body: JSON.stringify({ creatorId: creator.id, amount: amountKobo, message }),
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) onError(result.error ?? "We could not send that tip.");
@@ -833,9 +841,9 @@ function TipModal({
             <div className="amount-options">
               {[1000, 2500, 5000].map((value) => (
                 <button
-                  className={amount === value ? "active" : ""}
+                  className={!customAmount && amount === value * 100 ? "active" : ""}
                   key={value}
-                  onClick={() => setAmount(value)}
+                  onClick={() => { setAmount(value * 100); setCustomAmount(""); }}
                 >
                   ₦{value.toLocaleString()}
                 </button>
@@ -845,11 +853,8 @@ function TipModal({
                 <input
                   placeholder="Custom amount"
                   inputMode="numeric"
-                  onChange={(event) =>
-                    setAmount(
-                      Number(event.target.value.replace(/\D/g, "")) || 0,
-                    )
-                  }
+                  value={customAmount}
+                  onChange={(event) => setCustomAmount(event.target.value.replace(/\D/g, ""))}
                 />
               </label>
             </div>
@@ -859,12 +864,12 @@ function TipModal({
               placeholder="Add a note (optional)"
               rows={3}
             />
-            {error && (
+            {(error || localError) && (
               <p className="inline-error">
-                {error}{" "}
-                <button onClick={() => setFunding(true)}>
+                {localError || error}{" "}
+                {!localError && !error.includes("own creator") && <button onClick={() => setFunding(true)}>
                   Fund wallet
-                </button>
+                </button>}
               </p>
             )}
             <button className="primary-button" onClick={submit}>

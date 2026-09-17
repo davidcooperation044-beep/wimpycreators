@@ -39,7 +39,10 @@ export function apiMiddleware(): Connect.NextHandleFunction {
     const url = request.url?.split('?')[0] ?? ''
     const dynamicPayout = url.match(/^\/api\/payout-status\/([^/]+)$/)
     const handler = dynamicPayout ? payoutStatus : routes[url]
-    if (!handler) return next()
+    if (!handler) {
+      if (url.startsWith('/api/')) console.warn('Unmatched API route:', url, 'known routes:', Object.keys(routes))
+      return next()
+    }
     const body = await requestBody(request)
     const query = dynamicPayout ? { id: dynamicPayout[1] } : Object.fromEntries(new URL(request.url ?? '/', 'http://localhost').searchParams)
     try { await handler({ ...request, headers: request.headers, method: request.method, url: request.url, body, query } as any, responseAdapter(response) as any) } catch (error) { console.error(`API route failed: ${url}`, error); if (!response.writableEnded) responseAdapter(response).status(500).json({ error: 'Internal server error.' }) }
