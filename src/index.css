@@ -1,0 +1,5 @@
+:root { font-family: 'IBM Plex Sans', 'Trebuchet MS', sans-serif; color: #2b1730; background: #fdf8f3; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; }
