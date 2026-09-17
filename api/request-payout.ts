@@ -25,12 +25,13 @@ export default async function handler(request: VercelRequest, response: VercelRe
   const totalPaidOut = (paidPayouts ?? []).reduce((sum, item) => sum + item.amount_kobo, 0)
   const availableBalance = totalTips + totalSubscriptions - totalPaidOut
   if (amount > availableBalance) return response.status(400).json({ error: `Your available balance is ₦${Math.max(availableBalance, 0) / 100}. Request a smaller amount.` })
-  const { data: payout, error } = await supabase.from('wc_payouts').insert({ creator_id: creator.id, amount_kobo: amount, status: 'pending' }).select().single()
-  if (error) return response.status(500).json({ error: 'Could not create payout request.' })
-  const upstreamResponse = await fetch(`${process.env.WIMPYPAY_INTERNAL_URL}/internal/payout`, { method: 'POST', headers: getWimpyPayHeaders(), body: JSON.stringify({ creatorUserId: auth.user?.id, amount }) })
+  const idempotencyKey = crypto.randomUUID()
+  const { data: payout, error } = await supabase.from('wc_payouts').insert({ creator_id: creator.id, amount_kobo: amount, status: 'pending', idempotency_key: idempotencyKey }).select().single()
+  if (error) { if (error.code === '23505') return response.status(409).json({ error: 'A payout is already in progress. Wait for it to finish before requesting another.' }); return response.status(500).json({ error: 'Could not create payout request.' }) }
+  const upstreamResponse = await fetch(`${process.env.WIMPYPAY_INTERNAL_URL}/internal/payout`, { method: 'POST', headers: { ...getWimpyPayHeaders(), 'idempotency-key': idempotencyKey }, body: JSON.stringify({ creatorUserId: auth.user?.id, amount, idempotencyKey }) })
   const result = await upstreamResponse.json().catch(() => ({}))
   if (!upstreamResponse.ok) { await supabase.from('wc_payouts').update({ status: 'failed', processed_at: new Date().toISOString() }).eq('id', payout.id); return response.status(upstreamResponse.status).json({ error: result.error ?? 'WimpyPay could not start this payout.' }) }
   const transferCode = result.transfer_code ?? result.transferCode
-  await supabase.from('wc_payouts').update({ paystack_transfer_code: transferCode, status: result.status ?? 'processing' }).eq('id', payout.id)
+  await supabase.from('wc_payouts').update({ paystack_transfer_code: transferCode, wimpypay_reference: result.reference ?? result.transaction_reference ?? result.transactionReference, status: result.status ?? 'processing' }).eq('id', payout.id)
   return response.status(200).json({ payout: { ...payout, paystack_transfer_code: transferCode, status: result.status ?? 'processing' } })
 }

@@ -7,6 +7,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
   const auth = await requireUser(request, response)
   if (auth.error) return auth.error
   const payoutId = request.query?.id
+  if (typeof payoutId !== 'string' || !payoutId) return response.status(400).json({ error: 'A single payout id is required.' })
   const supabase = getServiceSupabase()
   const { data: payout } = await supabase.from('wc_payouts').select('*,wc_creators!inner(user_id)').eq('id', payoutId).eq('wc_creators.user_id', auth.user?.id).maybeSingle()
   if (!payout) return response.status(404).json({ error: 'Payout not found.' })
