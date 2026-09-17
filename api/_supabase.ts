@@ -12,7 +12,3 @@ export function getServiceSupabase() {
 export function getWimpyPayHeaders() {
   return { 'content-type': 'application/json', authorization: `Bearer ${process.env.WIMPYPAY_SHARED_SECRET ?? ''}` }
 }
-
-export function json(statusCode: number, body: unknown) {
-  return { statusCode, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-}
